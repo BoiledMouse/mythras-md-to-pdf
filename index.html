@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mythras PDF Filler (Client‑Side)</title>
+  <!-- pdf‑lib first so inline script can use window.PDFLib -->
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <h1>Mythras PDF Markdown → Filled Sheet</h1>
+  <form id="sheetForm">
+    <label>Markdown (.md)<br>
+      <input type="file" id="mdFile" accept=".md" required>
+    </label><br><br>
+    <label>Blank Mythras PDF<br>
+      <input type="file" id="pdfFile" accept="application/pdf" required>
+    </label><br><br>
+    <button type="submit">Generate filled PDF</button>
+  </form>
+
+  <script>
+  window.addEventListener('load', () => {
+    if (!window.PDFLib) {
+      alert('pdf-lib failed to load');
+      return;
+    }
+
+    const fieldMap = {
+      'Player': 'Player Name',
+      'Sex': 'Pronouns',
+      'Age': 'Age',
+      'Species': 'Race/Culture',
+      'Frame': 'Frame',
+      'Height': 'Height',
+      'Weight': 'Weight',
+      'Career': 'Career',
+      'Culture': 'Race/Culture',
+      'Social Class': 'Social Class',
+      'STR': 'STR',
+      'CON': 'CON',
+      'SIZ': 'SIZ',
+      'DEX': 'DEX',
+      'INT': 'INT',
+      'POW': 'POW',
+      'CHA': 'CHA'
+    };
+
+    document.getElementById('sheetForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const mdFile = document.getElementById('mdFile').files[0];
+      const pdfFile = document.getElementById('pdfFile').files[0];
+      if (!mdFile || !pdfFile) return alert('Choose both files');
+
+      const mdText = await mdFile.text();
+      const data = {};
+      const lineRegex = /\*\*(.+?)\*\*\s*:\s*(.+)/;
+      mdText.split(/\r?\n/).forEach(line => {
+        const m = line.match(lineRegex);
+        if (m) data[m[1].trim()] = m[2].trim();
+      });
+
+      const pdfBytes = await pdfFile.arrayBuffer();
+      const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+      const form = pdfDoc.getForm();
+
+      Object.entries(fieldMap).forEach(([mdKey, pdfName]) => {
+        if (data[mdKey]) {
+          try { form.getTextField(pdfName).setText(data[mdKey]); } catch {}
+        }
+      });
+
+      const outBytes = await pdfDoc.save();
+      const blob = new Blob([outBytes], {type: 'application/pdf'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'filled_sheet.pdf'; a.click();
+      URL.revokeObjectURL(url);
+    });
+  });
+  </script>
+</body>
+</html>
