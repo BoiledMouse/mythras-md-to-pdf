@@ -8,7 +8,7 @@
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
-  <h1>Mythras PDF Markdown → Filled Sheet (v.0.0.1)</h1>
+  <h1>Mythras PDF Markdown → Filled Sheet (v.0.0.2)</h1>
   <p>This tool is to use the exported markdown from https://boiledmouse.github.io/mythras-char-gen/ to populate the amazing fancy auto calculating character sheet from https://www.reddit.com/r/Mythras/comments/1jj2cqt/i_made_a_new_version_of_my_autosheet/</p>
   <form id="sheetForm">
     <label>Markdown (.md)<br>
@@ -78,20 +78,55 @@
 
       const mdText = await mdFile.text();
       const data = {};
+      const professionalSkills = [];
+      const combatSkills = [];
+      let section = null;
       const lineRegex = /\*\*(.+?)\*\*\s*:\s*(.+)/;
+
       mdText.split(/\r?\n/).forEach(line => {
-        const m = line.match(lineRegex);
-        if (m) data[m[1].trim()] = m[2].trim();
+        const header = line.match(/^###\s*(.+?)\s*$/);
+        if (header) {
+          const sec = header[1].trim();
+          if (sec === 'Professional Skills') section = 'professional';
+          else if (sec === 'Combat Skills') section = 'combat';
+          else section = null;
+          return;
+        }
+        if (section === 'professional') {
+          const m = line.match(/^\s*-\s*(.+?):\s*(\d+)%/);
+          if (m) professionalSkills.push({ name: m[1].trim(), value: m[2] });
+        } else if (section === 'combat') {
+          const m = line.match(/^\s*-\s*(.+?):\s*(\d+)%/);
+          if (m) combatSkills.push({ name: m[1].trim(), value: m[2] });
+        } else {
+          const m = line.match(lineRegex);
+          if (m) data[m[1].trim()] = m[2].trim();
+        }
       });
 
       const pdfBytes = await pdfFile.arrayBuffer();
       const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
       const form = pdfDoc.getForm();
 
+      // Fill simple mapped fields
       Object.entries(fieldMap).forEach(([mdKey, pdfName]) => {
         if (data[mdKey]) {
           try { form.getTextField(pdfName).setText(data[mdKey]); } catch {}
         }
+      });
+
+      // Fill professional skills dynamically
+      professionalSkills.forEach((skill, idx) => {
+        const slot = idx + 1;
+        try { form.getTextField(`Prof Skill ${slot}`).setText(skill.name); } catch {}
+        try { form.getTextField(`Prof Base ${slot}`).setText(skill.value); } catch {}
+      });
+
+      // Fill combat skills as combat styles
+      combatSkills.forEach((skill, idx) => {
+        const slot = idx + 1;
+        try { form.getTextField(`Style ${slot}`).setText(skill.name); } catch {}
+        try { form.getTextField(`WS ${slot}`).setText(skill.value); } catch {}
       });
 
       const outBytes = await pdfDoc.save();
