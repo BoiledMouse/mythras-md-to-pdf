@@ -52,11 +52,11 @@
       // Attributes
       'Action Points': 'Action Points Max',
       'Damage Mod': 'Damage Modifier Max',
+      'Xp Mod': 'Experience Modifier Max',
       'Healing Rate': 'Healing Rate Max',
       'Initiative Bonus': 'Initiative Max',
       'Luck Points': 'Luck Points Max',
       'Movement Rate': 'Movement Rate Max',
-      'Xp Mod': 'Experience Modifdier Max',
 
       // Hit points per location
       'Head': 'Head',
@@ -68,37 +68,36 @@
       'Right Leg': 'Right Leg',
 
       // Money
-      'Silver Remaining': 'Silver'
+      'Silver Remaining': 'Silver',
 
-      //Resistances
-      "Brawn": "Brawn",
-      "Endurance": "Endurance",
-      "Evade": "Evade",
-      "Willpower": "Willpower",
+      // Resistances
+      'Brawn': 'Brawn',
+      'Endurance': 'Endurance',
+      'Evade': 'Evade',
+      'Willpower': 'Willpower',
 
       // Standard Skills (Base skills)
-      "Athletics": "Athletics",
-      "Boating": "Boating",
-      "Conceal": "Conceal",
-      "Customs": "Customs",
-      "Dance": "Dance",
-      "Deceit": "Deceit",
-      "Drive": "Drive",
-      "First Aid": "FirstAid",
-      "Influence": "Influence",
-      "Insight": "Insight",
-      "Locale": "Locale",
-      "Native Tongue": "NativeTongue",   
-      "Perception": "Perception",
-      "Ride": "Ride",
-      "Sing": "Sing",
-      "Stealth": "Stealth",
-      "Swim": "Swim",
+      'Athletics': 'Athletics',
+      'Boating': 'Boating',
+      'Conceal': 'Conceal',
+      'Customs': 'Customs',
+      'Dance': 'Dance',
+      'Deceit': 'Deceit',
+      'Drive': 'Drive',
+      'First Aid': 'FirstAid',
+      'Influence': 'Influence',
+      'Insight': 'Insight',
+      'Locale': 'Locale',
+      'Native Tongue': 'NativeTongue',
+      'Perception': 'Perception',
+      'Ride': 'Ride',
+      'Sing': 'Sing',
+      'Stealth': 'Stealth',
+      'Swim': 'Swim',
 
       // Background and Connections
-      "Background, Community & Family": "Background", 
-      "Contacts, Allies & Enemies": "Contacts" 
-      
+      'Background, Community & Family': 'Background',
+      'Contacts, Allies & Enemies': 'Contacts'
     };
 
     document.getElementById('sheetForm').addEventListener('submit', async (e) => {
@@ -161,10 +160,9 @@
       });
 
       const outBytes = await pdfDoc.save();
-      const blob = new Blob([outBytes], {type: 'application/pdf'});
+      const blob = new Blob([outBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'filled_sheet.pdf'; a.click();
+      const a = document.createElement('a'); a.href = url; a.download = 'filled_sheet.pdf'; a.click();
       URL.revokeObjectURL(url);
     });
   });
