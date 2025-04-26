@@ -60,9 +60,8 @@
         return;
       }
 
-      // Map markdown keys → PDF form field names
+      // 1) Your core mapping of **Key** → PDF field
       const fieldMap = {
-        /* Personal details */
         Player: 'Player Name',
         Sex: 'Pronouns',
         Age: 'Age',
@@ -73,8 +72,6 @@
         Career: 'Career',
         Culture: 'Race/Culture',
         'Social Class': 'Social Class',
-
-        /* Characteristics (Max only; base set later) */
         STR: 'STR Max',
         CON: 'CON Max',
         SIZ: 'SIZ Max',
@@ -82,8 +79,6 @@
         INT: 'INT Max',
         POW: 'POW Max',
         CHA: 'CHA Max',
-
-        /* Attributes (Max only; base set later) */
         'Action Points': 'Action Points Max',
         'Damage Mod': 'Damage Modifier Max',
         'Xp Mod': 'Experience Modifier Max',
@@ -91,8 +86,6 @@
         'Initiative Bonus': 'Initiative Max',
         'Luck Points': 'Luck Points Max',
         'Movement Rate': 'Movement Rate Max',
-
-        /* Hit locations (Max only; base set later) */
         Head: 'Head Max',
         Chest: 'Chest Max',
         Abdomen: 'Abdomen Max',
@@ -100,198 +93,210 @@
         'Right Arm': 'Right Arm Max',
         'Left Leg': 'Left Leg Max',
         'Right Leg': 'Right Leg Max',
-
-        /* Money */
         'Silver Remaining': 'Silver',
-
-        /* Resistances */
         Brawn: 'Resistance Base 1',
         Endurance: 'Resistance Base 2',
         Evade: 'Resistance Base 3',
         Willpower: 'Resistance Base 4',
-
-        /* Standard Skills (Base values go into Skill Base #) */
-        Athletics:       'Skill Base 1',
-        Boating:         'Skill Base 2',
-        Conceal:         'Skill Base 3',
-        Customs:         'Skill Base 4',
-        Dance:           'Skill Base 5',
-        Deceit:          'Skill Base 6',
-        Drive:           'Skill Base 7',
-        'First Aid':     'Skill Base 8',
-        Influence:       'Skill Base 9',
-        Insight:         'Skill Base 10',
-        Locale:          'Skill Base 11',
-        Perception:      'Skill Base 12',
-        Ride:            'Skill Base 13',
-        Sing:            'Skill Base 14',
-        Stealth:         'Skill Base 15',
-        Swim:            'Skill Base 16',
-        Unarmed:         'Skill Base 17',
-
-        /* Background & Contacts */
+        // notes field
+        Notes: 'Notes',
+        // standard skills base fields
+        Athletics:  'Skill Base 1',
+        Boating:    'Skill Base 2',
+        Conceal:    'Skill Base 3',
+        Customs:    'Skill Base 4',
+        Dance:      'Skill Base 5',
+        Deceit:     'Skill Base 6',
+        Drive:      'Skill Base 7',
+        'First Aid':'Skill Base 8',
+        Influence:  'Skill Base 9',
+        Insight:    'Skill Base 10',
+        Locale:     'Skill Base 11',
+        Perception: 'Skill Base 12',
+        Ride:       'Skill Base 13',
+        Sing:       'Skill Base 14',
+        Stealth:    'Skill Base 15',
+        Swim:       'Skill Base 16',
+        Unarmed:    'Skill Base 17',
+        // background & contacts
         'Background, Community & Family': 'Background',
         'Contacts, Allies & Enemies':     'Contacts'
       };
 
-      document
-        .getElementById('sheetForm')
-        .addEventListener('submit', async (e) => {
-          e.preventDefault();
+      document.getElementById('sheetForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-          const mdFile = document.getElementById('mdFile').files[0];
-          const pdfFile = document.getElementById('pdfFile').files[0];
-          if (!mdFile || !pdfFile) {
-            return alert('Please choose both a Markdown file and the blank PDF.');
+        const mdFile = document.getElementById('mdFile').files[0];
+        const pdfFile = document.getElementById('pdfFile').files[0];
+        if (!mdFile || !pdfFile) {
+          return alert('Please choose both a Markdown file and the blank PDF.');
+        }
+
+        const mdText = await mdFile.text();
+        const data = {};
+        const professionalSkills = [];
+        const combatSkills = [];
+        const equipmentList = [];
+
+        let inBackground = false,
+            inContacts   = false,
+            inEquipment  = false,
+            section      = null;
+
+        // 2) Parse your markdown
+        mdText.split(/\r?\n/).forEach(line => {
+          // headings
+          const h = line.match(/^##\s*(.+)$/);
+          if (h) {
+            const name = h[1].trim();
+            inBackground = name === 'Background, Community & Family';
+            inContacts   = name === 'Contacts, Allies & Enemies';
+            inEquipment  = name === 'Equipment';
+            section      =
+              name === 'Professional Skills' ? 'professional' :
+              name === 'Combat Skills'       ? 'combat' :
+              null;
+            if (inBackground) data['Background, Community & Family'] = '';
+            if (inContacts)   data['Contacts, Allies & Enemies']     = '';
+            if (inEquipment)  equipmentList.length = 0;
+            return;
           }
 
-          const mdText = await mdFile.text();
-          const data = {};
-          const professionalSkills = [];
-          const combatSkills = [];
-          const equipmentList = [];
-
-          // Flags for which section we’re in
-          let inBackground = false;
-          let inContacts   = false;
-          let inEquipment  = false;
-          let section      = null;
-
-          // Parse line-by-line
-          mdText.split(/\r?\n/).forEach((line) => {
-            // ## headings
-            const sec = line.match(/^##\s*(.+)$/);
-            if (sec) {
-              const name = sec[1].trim();
-              inBackground = name === 'Background, Community & Family';
-              inContacts   = name === 'Contacts, Allies & Enemies';
-              inEquipment  = name === 'Equipment';
-              section      =
-                name === 'Professional Skills' ? 'professional' :
-                name === 'Combat Skills'       ? 'combat' :
-                null;
-
-              if (inBackground) data['Background, Community & Family'] = '';
-              if (inContacts)   data['Contacts, Allies & Enemies']     = '';
-              if (inEquipment)  equipmentList.length = 0;
-              return;
+          // section bodies
+          if (inBackground) {
+            if (line.trim() && !line.startsWith('##')) {
+              data['Background, Community & Family'] +=
+                (data['Background, Community & Family'] ? '\n' : '') +
+                line.trim();
             }
-
-            // Background text
-            if (inBackground) {
-              if (line.trim() && !line.startsWith('##')) {
-                data['Background, Community & Family'] +=
-                  (data['Background, Community & Family'] ? '\n' : '') +
-                  line.trim();
-              }
-              return;
+            return;
+          }
+          if (inContacts) {
+            if (line.trim() && !line.startsWith('##')) {
+              data['Contacts, Allies & Enemies'] +=
+                (data['Contacts, Allies & Enemies'] ? '\n' : '') +
+                line.trim();
             }
+            return;
+          }
+          if (inEquipment) {
+            const m = line.match(/^\s*-\s*(.+)$/);
+            if (m) equipmentList.push(m[1].trim());
+            return;
+          }
 
-            // Contacts text
-            if (inContacts) {
-              if (line.trim() && !line.startsWith('##')) {
-                data['Contacts, Allies & Enemies'] +=
-                  (data['Contacts, Allies & Enemies'] ? '\n' : '') +
-                  line.trim();
-              }
-              return;
-            }
+          // professional/combat skill lists
+          if (section === 'professional') {
+            const m = line.match(/^\s*-\s*(.+?):\s*(\d+)%/);
+            if (m) professionalSkills.push({ name: m[1].trim(), value: m[2] });
+            return;
+          }
+          if (section === 'combat') {
+            const m = line.match(/^\s*-\s*(.+?):\s*(\d+)%/);
+            if (m) combatSkills.push({ name: m[1].trim(), value: m[2] });
+            return;
+          }
 
-            // Equipment list
-            if (inEquipment) {
-              const m = line.match(/^\s*-\s*(.+)$/);
-              if (m) equipmentList.push(m[1].trim());
-              return;
-            }
-
-            // Professional / Combat skills
-            if (section === 'professional') {
-              const m = line.match(/^\s*-\s*(.+?):\s*(\d+)%/);
-              if (m) professionalSkills.push({ name: m[1].trim(), value: m[2] });
-            } else if (section === 'combat') {
-              const m = line.match(/^\s*-\s*(.+?):\s*(\d+)%/);
-              if (m) combatSkills.push({ name: m[1].trim(), value: m[2] });
-            } else {
-              // **Key**: Value
-              const m = line.match(/\*\*(.+?)\*\*\s*:\s*(.+)/);
-              if (m) data[m[1].trim()] = m[2].trim();
-            }
-          });
-
-          // Load PDF, get form
-          const pdfBytes = await pdfFile.arrayBuffer();
-          const pdfDoc   = await PDFLib.PDFDocument.load(pdfBytes);
-          const form     = pdfDoc.getForm();
-
-          // 1) Fill everyone in fieldMap
-          Object.entries(fieldMap).forEach(([mdKey, pdfName]) => {
-            if (data[mdKey]) {
-              try {
-                form.getTextField(pdfName).setText(data[mdKey]);
-              } catch {}
-            }
-          });
-
-          // 2) Characteristics base+max
-          ['STR','CON','SIZ','DEX','INT','POW','CHA'].forEach(ch => {
-            if (data[ch]) {
-              try { form.getTextField(`${ch} Max`).setText(data[ch]); } catch {}
-              try { form.getTextField(ch).setText(data[ch]);     } catch {}
-            }
-          });
-
-          // 3) Attributes base+max
-          [
-            { md:'Action Points',    f:'Action Points' },
-            { md:'Damage Mod',       f:'Damage Modifier' },
-            { md:'Xp Mod',           f:'Experience Modifier' },
-            { md:'Healing Rate',     f:'Healing Rate' },
-            { md:'Initiative Bonus', f:'Initiative' },
-            { md:'Luck Points',      f:'Luck Points' },
-            { md:'Movement Rate',    f:'Movement Rate' }
-          ].forEach(({md,f}) => {
-            if (data[md]) {
-              try { form.getTextField(`${f} Max`).setText(data[md]); } catch {}
-              try { form.getTextField(f).setText(data[md]);         } catch {}
-            }
-          });
-
-          // 4) Hit locations base+max
-          ['Head','Chest','Abdomen','Left Arm','Right Arm','Left Leg','Right Leg']
-            .forEach(loc => {
-              if (data[loc]) {
-                try { form.getTextField(`${loc} Max`).setText(data[loc]); } catch {}
-                try { form.getTextField(loc).setText(data[loc]);         } catch {}
-              }
-            });
-
-          // 5) Equipment
-          equipmentList.forEach((item, i) => {
-            try { form.getTextField(`Item ${i+1}`).setText(item); } catch {}
-          });
-
-          // 6) Professional skills
-          professionalSkills.forEach((s, i) => {
-            try { form.getTextField(`Prof Skill ${i+1}`).setText(s.name); } catch {}
-            try { form.getTextField(`Prof Base ${i+1}`).setText(s.value); } catch {}
-          });
-
-          // 7) Combat styles
-          combatSkills.forEach((s, i) => {
-            try { form.getTextField(`Style ${i+1}`).setText(s.name); } catch {}
-            try { form.getTextField(`WS ${i+1}`).setText(s.value);     } catch {}
-          });
-
-          // Save & download
-          const outBytes = await pdfDoc.save();
-          const blob     = new Blob([outBytes], { type: 'application/pdf' });
-          const url      = URL.createObjectURL(blob);
-          const a        = document.createElement('a');
-          a.href         = url;
-          a.download     = 'filled_sheet.pdf';
-          a.click();
-          URL.revokeObjectURL(url);
+          // simple **Key**: Value
+          const m = line.match(/\*\*(.+?)\*\*\s*:\s*(.+)/);
+          if (m) data[m[1].trim()] = m[2].trim();
         });
+
+        // 3) Load PDF form
+        const pdfBytes = await pdfFile.arrayBuffer();
+        const pdfDoc   = await PDFLib.PDFDocument.load(pdfBytes);
+        const form     = pdfDoc.getForm();
+
+        // 4) Fill every field in fieldMap
+        Object.entries(fieldMap).forEach(([key, field]) => {
+          if (data[key]) {
+            try { form.getTextField(field).setText(data[key]); }
+            catch {}
+          }
+        });
+
+        // 5) Fill characteristic bases & max
+        ['STR','CON','SIZ','DEX','INT','POW','CHA'].forEach(ch => {
+          if (data[ch]) {
+            try { form.getTextField(`${ch} Max`).setText(data[ch]); } catch {}
+            try { form.getTextField(ch).setText(data[ch]);     } catch {}
+          }
+        });
+
+        // 6) Fill attribute bases & max
+        [
+          { md:'Action Points',    f:'Action Points' },
+          { md:'Damage Mod',       f:'Damage Modifier' },
+          { md:'Xp Mod',           f:'Experience Modifier' },
+          { md:'Healing Rate',     f:'Healing Rate' },
+          { md:'Initiative Bonus', f:'Initiative' },
+          { md:'Luck Points',      f:'Luck Points' },
+          { md:'Movement Rate',    f:'Movement Rate' }
+        ].forEach(({md,f}) => {
+          if (data[md]) {
+            try { form.getTextField(`${f} Max`).setText(data[md]); } catch {}
+            try { form.getTextField(f).setText(data[md]);         } catch {}
+          }
+        });
+
+        // 7) Fill hit locations
+        ['Head','Chest','Abdomen','Left Arm','Right Arm','Left Leg','Right Leg']
+          .forEach(loc => {
+            if (data[loc]) {
+              try { form.getTextField(`${loc} Max`).setText(data[loc]); } catch {}
+              try { form.getTextField(loc).setText(data[loc]);         } catch {}
+            }
+          });
+
+        // 8) Standard skills **and** all calculated columns
+        const stdSkills = [
+          'Athletics','Boating','Conceal','Customs','Dance','Deceit','Drive',
+          'First Aid','Influence','Insight','Locale','Perception',
+          'Ride','Sing','Stealth','Swim','Unarmed'
+        ];
+        stdSkills.forEach((skill, i) => {
+          const val = data[skill];
+          if (!val) return;
+          const idx = i + 1;
+          // base plus every “VE_SK”, “E_SK”, “Total_SK”, “HD_SK”, “FM_SK”, “HC_SK”
+          [
+            `Skill Base ${idx}`,
+            `VE_SK_${idx}`,
+            `E_SK_${idx}`,
+            `Total_SK_${idx}`,
+            `HD_SK_${idx}`,
+            `FM_SK_${idx}`,
+            `HC_SK_${idx}`,
+          ].forEach(fld => {
+            try { form.getTextField(fld).setText(val); } catch {}
+          });
+        });
+
+        // 9) Equipment list
+        equipmentList.forEach((item, i) => {
+          try { form.getTextField(`Item ${i + 1}`).setText(item); } catch {}
+        });
+
+        // 10) Professional & Combat skills (unchanged)
+        professionalSkills.forEach((s, i) => {
+          try { form.getTextField(`Prof Skill ${i + 1}`).setText(s.name); } catch {}
+          try { form.getTextField(`Prof Base ${i + 1}`).setText(s.value); } catch {}
+        });
+        combatSkills.forEach((s, i) => {
+          try { form.getTextField(`Style ${i + 1}`).setText(s.name); } catch {}
+          try { form.getTextField(`WS ${i + 1}`).setText(s.value);     } catch {}
+        });
+
+        // 11) Save & trigger download
+        const outBytes = await pdfDoc.save();
+        const blob     = new Blob([outBytes], { type: 'application/pdf' });
+        const url      = URL.createObjectURL(blob);
+        const a        = document.createElement('a');
+        a.href         = url;
+        a.download     = 'filled_sheet.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
     });
   </script>
 </body>
