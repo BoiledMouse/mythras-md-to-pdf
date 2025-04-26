@@ -2,194 +2,297 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mythras PDF Filler</title>
   <!-- pdf-lib first so inline script can use window.PDFLib -->
-  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" crossorigin="anonymous"></script>
+  <script
+    src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"
+    crossorigin="anonymous"
+  ></script>
 </head>
 <body>
-  <h1>Mythras PDF Markdown → Filled Sheet (v.0.1.0)</h1>
+  <h1>Mythras PDF Markdown → Filled Sheet (v0.0.3)</h1>
   <p>
-    Paste in the exported Markdown from
-    <a href="https://boiledmouse.github.io/mythras-char-gen/" target="_blank">Mythras Char Gen</a>
-    and a blank Mythras PDF from
-    <a href="https://www.reddit.com/r/Mythras/comments/1jj2cqt/i_made_a_new_version_of_my_autosheet/" target="_blank">here</a>.
+    This tool takes the exported Markdown from
+    <a
+      href="https://boiledmouse.github.io/mythras-char-gen/"
+      target="_blank"
+      rel="noopener"
+      >Mythras Character Generator</a
+    >
+    and auto-fills the character sheet from
+    <a
+      href="https://www.reddit.com/r/Mythras/comments/1jj2cqt/i_made_a_new_version_of_my_autosheet/"
+      target="_blank"
+      rel="noopener"
+      >this Reddit autosheet</a
+    >.
   </p>
+
   <form id="sheetForm">
-    <label>Markdown (.md)<br/>
-      <input type="file" id="mdFile" accept=".md" required>
-    </label><br/><br/>
-    <label>Blank Mythras PDF<br/>
-      <input type="file" id="pdfFile" accept="application/pdf" required>
-    </label><br/><br/>
+    <label>
+      Markdown (.md)<br />
+      <input
+        type="file"
+        id="mdFile"
+        accept=".md,text/markdown"
+        required
+      />
+    </label>
+    <br /><br />
+    <label>
+      Blank Mythras PDF<br />
+      <input
+        type="file"
+        id="pdfFile"
+        accept=".pdf,application/pdf"
+        required
+      />
+    </label>
+    <br /><br />
     <button type="submit">Generate filled PDF</button>
   </form>
 
   <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    if (!window.PDFLib) {
-      alert('pdf-lib failed to load');
-      return;
-    }
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!window.PDFLib) {
+        alert('pdf-lib failed to load');
+        return;
+      }
 
-    const fieldMap = {
-      'Player':'Player Name','Name':'Character Name',
-      'Sex':'Pronouns','Sex':'Pronouns','Gender':'Pronouns',
-      'Age':'Age','Hand':'Hand','Frame':'Frame','Height':'Height','Weight':'Weight',
-      'Race/Culture':'Race/Culture','Species':'Race/Culture','Culture':'Race/Culture','Career':'Career',
-      'Player':'Player Name','Player Name':'Player Name','Homeland':'Homeland',
-      'Career':'Career','Social Class':'Social Class',
-      'STR':'STR Max','STR':'STR','CON':'CON Max','CON':'CON',
-      'SIZ':'SIZ Max','SIZ':'SIZ','DEX':'DEX Max','DEX':'DEX',
-      'INT':'INT Max','INT':'INT','POW':'POW Max','POW':'POW',
-      'CHA':'CHA Max','CHA':'CHA',
-      'Action Points':'Action Points Max','Action Points':'Action Points',
-      'Damage Modifier':'Damage Modifier Max','Damage Modifier':'Damage Modifier','Damage Mod':'Damage Modifier',
-      'Experience Modifier Max':'Experience Modifier Max','Experience Modifier':'Experience Modifier','Xp Mod':'Experience Modifier',
-      'Healing Rate':'Healing Rate Max','Healing Rate':'Healing Rate',
-      'Initiative':'Initiative Max','Initiative':'Initiative',
-      'Luck Points':'Luck Points Max','Luck Points':'Luck Points',
-      'Movement Rate':'Movement Rate Max','Movement Rate':'Movement Rate',
-      'Copper Remaining':'Copper','Silver Remaining':'Silver','Gold Remaining':'Gold',
-      'Native Tongue':'Native Language Base',
-      'Background, Community & Family':'Notes_1',
-      'Contacts, Allies & Enemies':'Notes_2'
-    };
+      // Map markdown keys → PDF form field names
+      const fieldMap = {
+        /* Personal details */
+        Player: 'Player Name',
+        Sex: 'Pronouns',
+        Age: 'Age',
+        Species: 'Race/Culture',
+        Frame: 'Frame',
+        Height: 'Height',
+        Weight: 'Weight',
+        Career: 'Career',
+        Culture: 'Race/Culture',
+        'Social Class': 'Social Class',
 
-    const skillOrder = { 'Athletics':1,'Boating':2,'Conceal':3,'Customs':4,
-                         'Dance':5,'Deceit':6,'Drive':7,'First Aid':8,
-                         'Influence':9,'Insight':10,'Locale':11,'Perception':12,
-                         'Ride':13,'Sing':14,'Stealth':15,'Swim':16,'Unarmed':17 };
-    const resOrder   = { 'Brawn':1,'Endurance':2,'Evade':3,'Willpower':4 };
-    const factors    = { VE:2, E:1.5, HD:2/3, FM:1/2, HC:1/10 };
+        /* Characteristics (Max only; base set later) */
+        STR: 'STR Max',
+        CON: 'CON Max',
+        SIZ: 'SIZ Max',
+        DEX: 'DEX Max',
+        INT: 'INT Max',
+        POW: 'POW Max',
+        CHA: 'CHA Max',
 
-    const form = document.getElementById('sheetForm');
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      const mdFile  = document.getElementById('mdFile').files[0];
-      const pdfFile = document.getElementById('pdfFile').files[0];
-      if (!mdFile || !pdfFile) return alert('Please select both files.');
+        /* Attributes (Max only; base set later) */
+        'Action Points': 'Action Points Max',
+        'Damage Mod': 'Damage Modifier Max',
+        'Xp Mod': 'Experience Modifier Max',
+        'Healing Rate': 'Healing Rate Max',
+        'Initiative Bonus': 'Initiative Max',
+        'Luck Points': 'Luck Points Max',
+        'Movement Rate': 'Movement Rate Max',
 
-      const mdText = await mdFile.text();
-      const data = {};
-      const bullets = { standard:{}, resistance:{}, professional:[], combat:[] };
-      let section = null;
+        /* Hit locations (Max only; base set later) */
+        Head: 'Head Max',
+        Chest: 'Chest Max',
+        Abdomen: 'Abdomen Max',
+        'Left Arm': 'Left Arm Max',
+        'Right Arm': 'Right Arm Max',
+        'Left Leg': 'Left Leg Max',
+        'Right Leg': 'Right Leg Max',
 
-      // Regexes
-      const headerRe = /^#{2,6}\s*(.+?)\s*$/;
-      const bulletRe = /^\s*[-*]\s*(?:\*\*)?(.+?)(?:\*\*)?\s*:\s*(.+)$/;
-      const simpleRe = /^\*\*(.+?)\*\*\s*:\s*(.+)$/;
-      const nameRe   = /^#\s*(.+)$/;
+        /* Money */
+        'Silver Remaining': 'Silver',
 
-      // Parse markdown
-      mdText.split(/\r?\n/).forEach(lineRaw => {
-        const raw = lineRaw.trim(); if (!raw) return;
+        /* Resistances */
+        Brawn: 'Resistance Base 1',
+        Endurance: 'Resistance Base 2',
+        Evade: 'Resistance Base 3',
+        Willpower: 'Resistance Base 4',
 
-        // Top-level name
-        const nm = raw.match(nameRe);
-        if (nm && !data['Character Name']) {
-          data['Character Name'] = nm[1].trim();
-          return;
-        }
+        /* Standard Skills (Base values go into Skill Base #) */
+        Athletics:       'Skill Base 1',
+        Boating:         'Skill Base 2',
+        Conceal:         'Skill Base 3',
+        Customs:         'Skill Base 4',
+        Dance:           'Skill Base 5',
+        Deceit:          'Skill Base 6',
+        Drive:           'Skill Base 7',
+        'First Aid':     'Skill Base 8',
+        Influence:       'Skill Base 9',
+        Insight:         'Skill Base 10',
+        Locale:          'Skill Base 11',
+        Perception:      'Skill Base 12',
+        Ride:            'Skill Base 13',
+        Sing:            'Skill Base 14',
+        Stealth:         'Skill Base 15',
+        Swim:            'Skill Base 16',
+        Unarmed:         'Skill Base 17',
 
-        // Section headers
-        const h = raw.match(headerRe);
-        if (h) {
-          const sec = h[1].trim().toLowerCase();
-          if (sec.includes('professional skills')) section = 'professional';
-          else if (sec.includes('combat skills')) section = 'combat';
-          else section = null;
-          return;
-        }
+        /* Background & Contacts */
+        'Background, Community & Family': 'Background',
+        'Contacts, Allies & Enemies':     'Contacts'
+      };
 
-        // Bullets
-        const b = raw.match(bulletRe);
-        if (b) {
-          const name = b[1].trim();
-          let valRaw = b[2].trim();
-          const numMatch = valRaw.match(/^(\d+)%?/);
-          const val = numMatch ? numMatch[1] : valRaw;
+      document
+        .getElementById('sheetForm')
+        .addEventListener('submit', async (e) => {
+          e.preventDefault();
 
-          // Assign
-          if (skillOrder[name] !== undefined) bullets.standard[name] = val;
-          if (resOrder[name] !== undefined)   bullets.resistance[name] = val;
-          if (section === 'professional') bullets.professional.push({name,val});
-          if (section === 'combat')       bullets.combat.push({name,val});
-          // Also map simple fields
-          if (fieldMap[name]) data[name] = valRaw;
-          return;
-        }
+          const mdFile = document.getElementById('mdFile').files[0];
+          const pdfFile = document.getElementById('pdfFile').files[0];
+          if (!mdFile || !pdfFile) {
+            return alert('Please choose both a Markdown file and the blank PDF.');
+          }
 
-        // Simple **Key**: Value
-        const s = raw.match(simpleRe);
-        if (s) data[s[1].trim()] = s[2].trim();
-      });
+          const mdText = await mdFile.text();
+          const data = {};
+          const professionalSkills = [];
+          const combatSkills = [];
+          const equipmentList = [];
 
-      // Load PDF
-      const pdfBytes = await pdfFile.arrayBuffer();
-      const pdfDoc   = await PDFLib.PDFDocument.load(pdfBytes);
-      const formObj  = pdfDoc.getForm();
+          // Flags for which section we’re in
+          let inBackground = false;
+          let inContacts   = false;
+          let inEquipment  = false;
+          let section      = null;
 
-      // Fill simple fields
-      Object.entries(fieldMap).forEach(([key, fieldName]) => {
-        const val = data[key];
-        if (val !== undefined) {
-          try { formObj.getTextField(fieldName).setText(val); } catch {}
-        }
-      });
+          // Parse line-by-line
+          mdText.split(/\r?\n/).forEach((line) => {
+            // ## headings
+            const sec = line.match(/^##\s*(.+)$/);
+            if (sec) {
+              const name = sec[1].trim();
+              inBackground = name === 'Background, Community & Family';
+              inContacts   = name === 'Contacts, Allies & Enemies';
+              inEquipment  = name === 'Equipment';
+              section      =
+                name === 'Professional Skills' ? 'professional' :
+                name === 'Combat Skills'       ? 'combat' :
+                null;
 
-      // Skills
-      Object.entries(skillOrder).forEach(([name,pos]) => {
-        const v = bullets.standard[name]; if (!v) return;
-        const base = Number(v); if (isNaN(base)) return;
-        try { formObj.getTextField(`Skill Base ${pos}`).setText(v); } catch {}
-        try { formObj.getTextField(`Total_SK_${pos}`).setText(v); } catch {}
-        Object.entries(factors).forEach(([tag,f]) => {
-          try { formObj.getTextField(`${tag}_SK_${pos}`).setText(Math.floor(base*f).toString()); } catch {}
+              if (inBackground) data['Background, Community & Family'] = '';
+              if (inContacts)   data['Contacts, Allies & Enemies']     = '';
+              if (inEquipment)  equipmentList.length = 0;
+              return;
+            }
+
+            // Background text
+            if (inBackground) {
+              if (line.trim() && !line.startsWith('##')) {
+                data['Background, Community & Family'] +=
+                  (data['Background, Community & Family'] ? '\n' : '') +
+                  line.trim();
+              }
+              return;
+            }
+
+            // Contacts text
+            if (inContacts) {
+              if (line.trim() && !line.startsWith('##')) {
+                data['Contacts, Allies & Enemies'] +=
+                  (data['Contacts, Allies & Enemies'] ? '\n' : '') +
+                  line.trim();
+              }
+              return;
+            }
+
+            // Equipment list
+            if (inEquipment) {
+              const m = line.match(/^\s*-\s*(.+)$/);
+              if (m) equipmentList.push(m[1].trim());
+              return;
+            }
+
+            // Professional / Combat skills
+            if (section === 'professional') {
+              const m = line.match(/^\s*-\s*(.+?):\s*(\d+)%/);
+              if (m) professionalSkills.push({ name: m[1].trim(), value: m[2] });
+            } else if (section === 'combat') {
+              const m = line.match(/^\s*-\s*(.+?):\s*(\d+)%/);
+              if (m) combatSkills.push({ name: m[1].trim(), value: m[2] });
+            } else {
+              // **Key**: Value
+              const m = line.match(/\*\*(.+?)\*\*\s*:\s*(.+)/);
+              if (m) data[m[1].trim()] = m[2].trim();
+            }
+          });
+
+          // Load PDF, get form
+          const pdfBytes = await pdfFile.arrayBuffer();
+          const pdfDoc   = await PDFLib.PDFDocument.load(pdfBytes);
+          const form     = pdfDoc.getForm();
+
+          // 1) Fill everyone in fieldMap
+          Object.entries(fieldMap).forEach(([mdKey, pdfName]) => {
+            if (data[mdKey]) {
+              try {
+                form.getTextField(pdfName).setText(data[mdKey]);
+              } catch {}
+            }
+          });
+
+          // 2) Characteristics base+max
+          ['STR','CON','SIZ','DEX','INT','POW','CHA'].forEach(ch => {
+            if (data[ch]) {
+              try { form.getTextField(`${ch} Max`).setText(data[ch]); } catch {}
+              try { form.getTextField(ch).setText(data[ch]);     } catch {}
+            }
+          });
+
+          // 3) Attributes base+max
+          [
+            { md:'Action Points',    f:'Action Points' },
+            { md:'Damage Mod',       f:'Damage Modifier' },
+            { md:'Xp Mod',           f:'Experience Modifier' },
+            { md:'Healing Rate',     f:'Healing Rate' },
+            { md:'Initiative Bonus', f:'Initiative' },
+            { md:'Luck Points',      f:'Luck Points' },
+            { md:'Movement Rate',    f:'Movement Rate' }
+          ].forEach(({md,f}) => {
+            if (data[md]) {
+              try { form.getTextField(`${f} Max`).setText(data[md]); } catch {}
+              try { form.getTextField(f).setText(data[md]);         } catch {}
+            }
+          });
+
+          // 4) Hit locations base+max
+          ['Head','Chest','Abdomen','Left Arm','Right Arm','Left Leg','Right Leg']
+            .forEach(loc => {
+              if (data[loc]) {
+                try { form.getTextField(`${loc} Max`).setText(data[loc]); } catch {}
+                try { form.getTextField(loc).setText(data[loc]);         } catch {}
+              }
+            });
+
+          // 5) Equipment
+          equipmentList.forEach((item, i) => {
+            try { form.getTextField(`Item ${i+1}`).setText(item); } catch {}
+          });
+
+          // 6) Professional skills
+          professionalSkills.forEach((s, i) => {
+            try { form.getTextField(`Prof Skill ${i+1}`).setText(s.name); } catch {}
+            try { form.getTextField(`Prof Base ${i+1}`).setText(s.value); } catch {}
+          });
+
+          // 7) Combat styles
+          combatSkills.forEach((s, i) => {
+            try { form.getTextField(`Style ${i+1}`).setText(s.name); } catch {}
+            try { form.getTextField(`WS ${i+1}`).setText(s.value);     } catch {}
+          });
+
+          // Save & download
+          const outBytes = await pdfDoc.save();
+          const blob     = new Blob([outBytes], { type: 'application/pdf' });
+          const url      = URL.createObjectURL(blob);
+          const a        = document.createElement('a');
+          a.href         = url;
+          a.download     = 'filled_sheet.pdf';
+          a.click();
+          URL.revokeObjectURL(url);
         });
-      });
-
-      // Resistances
-      Object.entries(resOrder).forEach(([name,pos]) => {
-        const v = bullets.resistance[name]; if (!v) return;
-        const base = Number(v); if (isNaN(base)) return;
-        try { formObj.getTextField(`Resistance Base ${pos}`).setText(v); } catch {}
-        try { formObj.getTextField(`Total_RE_${pos}`).setText(v); } catch {}
-        Object.entries(factors).forEach(([tag,f]) => {
-          try { formObj.getTextField(`${tag}_RE_${pos}`).setText(Math.floor(base*f).toString()); } catch {}
-        });
-      });
-
-      // Professional Skills
-      bullets.professional.forEach(({name,val}, idx) => {
-        const slot = idx+1; const base = Number(val);
-        try { formObj.getTextField(`Prof Skill ${slot}`).setText(name); } catch {}
-        try { formObj.getTextField(`Prof Base ${slot}`).setText(val); } catch {}
-        if (!isNaN(base)) Object.entries(factors).forEach(([tag,f]) => {
-          try { formObj.getTextField(`${tag}_PK_${slot}`).setText(Math.floor(base*f).toString()); } catch {}
-        });
-      });
-
-      // Combat Styles
-      bullets.combat.forEach(({name,val}, idx) => {
-        const slot = idx+1; const base = Number(val);
-        try { formObj.getTextField(`Style ${slot}`).setText(name); } catch {}
-        try { formObj.getTextField(`WS ${slot}`).setText(val); } catch {}
-        try { formObj.getTextField(`Total_CS_${slot}`).setText(val); } catch {}
-        if (!isNaN(base)) Object.entries(factors).forEach(([tag,f]) => {
-          try { formObj.getTextField(`${tag}_CS_${slot}`).setText(Math.floor(base*f).toString()); } catch {}
-        });
-      });
-
-      // Save & download
-      const outBytes = await pdfDoc.save();
-      const blob     = new Blob([outBytes], {type:'application/pdf'});
-      const url      = URL.createObjectURL(blob);
-      const a        = document.createElement('a');
-      a.href         = url; a.download = 'filled_sheet.pdf'; a.click();
-      URL.revokeObjectURL(url);
     });
-  });
   </script>
 </body>
 </html>
