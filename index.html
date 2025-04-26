@@ -8,8 +8,11 @@
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
-  <h1>Mythras PDF Markdown → Filled Sheet (v.0.0.2)</h1>
-  <p>This tool is to use the exported markdown from https://boiledmouse.github.io/mythras-char-gen/ to populate the amazing fancy auto calculating character sheet from https://www.reddit.com/r/Mythras/comments/1jj2cqt/i_made_a_new_version_of_my_autosheet/</p>
+  <h1>Mythras PDF Markdown → Filled Sheet (v.0.0.3)</h1>
+  <p>This tool is to use the exported markdown from 
+  https://boiledmouse.github.io/mythras-char-gen/ to populate the amazing fancy 
+  auto calculating character sheet from https://www.reddit.com/r/Mythras/comments/
+  1jj2cqt/i_made_a_new_version_of_my_autosheet/</p>
   <form id="sheetForm">
     <label>Markdown (.md)<br>
       <input type="file" id="mdFile" accept=".md" required>
@@ -78,22 +81,23 @@
 
       // Standard Skills (Base skills)
       'Athletics': 'Skill Base 1',
-      'Boating': 'Boating',
-      'Conceal': 'Conceal',
-      'Customs': 'Customs',
-      'Dance': 'Dance',
-      'Deceit': 'Deceit',
-      'Drive': 'Drive',
-      'First Aid': 'FirstAid',
-      'Influence': 'Influence',
-      'Insight': 'Insight',
-      'Locale': 'Locale',
-      'Native Tongue': 'NativeTongue',
-      'Perception': 'Perception',
-      'Ride': 'Ride',
-      'Sing': 'Sing',
-      'Stealth': 'Stealth',
-      'Swim': 'Swim',
+      'Boating': 'Skill Base 2',
+      'Conceal': 'Skill Base 3',
+      'Customs': 'Skill Base 4',
+      'Dance': 'Skill Base 5',
+      'Deceit': 'Skill Base 6',
+      'Drive': 'Skill Base 7',
+      'First Aid': 'Skill Base 8',
+      'Influence': 'Skill Base 9',
+      'Insight': 'Skill Base 10',
+      'Locale': 'Skill Base 11',
+      'Native Tongue': 'Native Language Base',
+      'Perception': 'Skill Base 12',
+      'Ride': 'Skill Base 13',
+      'Sing': 'Skill Base 14',
+      'Stealth': 'Skill Base 15',
+      'Swim': 'Skill Base 16',
+      'Unarmed': 'Skill Base 17',
 
       // Background and Connections
       'Background, Community & Family': 'Background',
@@ -130,7 +134,17 @@
           if (m) combatSkills.push({ name: m[1].trim(), value: m[2] });
         } else {
           const m = line.match(lineRegex);
-          if (m) data[m[1].trim()] = m[2].trim();
+          if (m) {
+            let key = m[1].trim();
+            let value = m[2].trim();
+            if (value.includes('%')) {
+              const percentPos = value.indexOf('%');
+              if (percentPos !== -1) {
+                value = value.substring(0, percentPos);
+              }
+            }
+            data[key] = value;
+          }
         }
       });
 
@@ -157,6 +171,45 @@
         const slot = idx + 1;
         try { form.getTextField(`Style ${slot}`).setText(skill.name); } catch {}
         try { form.getTextField(`WS ${slot}`).setText(skill.value); } catch {}
+      });
+      // Populate skill-related difficulty fields
+      const difficultyFactors = { VE: 2, E: 1.5, HD: 2/3, FM: 1/2, HC: 0.9 };
+      const standardSkillList = ['Athletics', 'Boating', 'Conceal', 'Customs', 'Dance', 'Deceit', 'Drive', 'First Aid', 'Influence', 'Insight', 'Locale', 'Perception', 'Ride', 'Sing', 'Stealth', 'Swim', 'Unarmed'];
+      const resistances = ['Brawn', 'Endurance', 'Evade', 'Willpower'];
+      // Standard Skills difficulties
+      standardSkillList.forEach((skill, i) => {
+        if (!data[skill]) return;
+        const baseVal = Number(data[skill]);
+        if (isNaN(baseVal)) return;
+        const index = i + 1;
+        Object.entries(difficultyFactors).forEach(([diff, factor]) => {
+          const diffVal = Math.floor(baseVal * factor);
+          try { form.getTextField(`${diff}_SK_${index}`).setText(diffVal.toString()); } catch {}
+        });
+        try { form.getTextField(`Total_SK_${index}`).setText(baseVal.toString()); } catch {}
+      });
+      // Resistance Base difficulties
+      resistances.forEach((res, j) => {
+        if (!data[res]) return;
+        const baseVal = Number(data[res]);
+        if (isNaN(baseVal)) return;
+        const idx = j + 1;
+        Object.entries(difficultyFactors).forEach(([diff, factor]) => {
+          const diffVal = Math.floor(baseVal * factor);
+          try { form.getTextField(`${diff}_RE_${idx}`).setText(diffVal.toString()); } catch {}
+        });
+        try { form.getTextField(`Total_RE_${idx}`).setText(baseVal.toString()); } catch {}
+      });
+      // Combat Styles difficulties
+      combatSkills.forEach((skill, idx) => {
+        const baseVal = Number(skill.value);
+        if (isNaN(baseVal)) return;
+        const slot = idx + 1;
+        Object.entries(difficultyFactors).forEach(([diff, factor]) => {
+          const diffVal = Math.floor(baseVal * factor);
+          try { form.getTextField(`${diff}_CS_${slot}`).setText(diffVal.toString()); } catch {}
+        });
+        try { form.getTextField(`Total_CS_${slot}`).setText(baseVal.toString()); } catch {}
       });
 
       const outBytes = await pdfDoc.save();
