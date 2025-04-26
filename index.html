@@ -8,7 +8,7 @@
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
-  <h1>Mythras PDF Markdown → Filled Sheet (v.0.0.6)</h1>
+  <h1>Mythras PDF Markdown → Filled Sheet (v.0.0.7)</h1>
   <p>
     Paste in the exported Markdown from 
     <a href="https://boiledmouse.github.io/mythras-char-gen/" target="_blank">Mythras Char Gen</a>
@@ -26,7 +26,6 @@
   </form>
 
   <script>
-  // Wait for DOM so form & inputs exist
   document.addEventListener('DOMContentLoaded', () => {
     if (!window.PDFLib) {
       alert('pdf-lib failed to load');
@@ -36,35 +35,29 @@
     const form = document.getElementById('sheetForm');
     form.addEventListener('submit', async e => {
       e.preventDefault();
-
       const mdFile  = document.getElementById('mdFile').files[0];
       const pdfFile = document.getElementById('pdfFile').files[0];
-      if (!mdFile || !pdfFile) {
-        return alert('Please select both files.');
-      }
+      if (!mdFile || !pdfFile) return alert('Please select both files.');
 
       const mdText = await mdFile.text();
 
-      // Collect simple **Key**: value and bullet sections
+      // Storage
       const data = {};
-      const bullets = {
-        standard:   {},
-        resistance: {},
-        professional: [],
-        combat:       []
-      };
+      const bullets = { standard: {}, resistance: {}, professional: [], combat: [] };
       let section = null;
 
       // Regexes
       const headerRe = /^#{2,6}\s*(?:\*\*)?(.+?)(?:\*\*)?\s*$/;
-      const bulletRe = /^[\-\*]\s*\*\*(.+?)\*\*\s*:\s*(\d+)%/;
+      // Accept bullets like "- Athletics: 30%" or "- **Athletics**: 30%"
+      const bulletRe = /^\s*[-*]\s*(?:\*\*)?(.+?)(?:\*\*)?\s*:\s*(\d+)%/;
       const simpleRe = /^\*\*(.+?)\*\*\s*:\s*(.+)$/;
 
-      mdText.split(/\r?\n/).forEach(lineRaw => {
-        const line = lineRaw.trim();
+      // Parse markdown
+      mdText.split(/\r?\n/).forEach(raw => {
+        const line = raw.trim();
         if (!line) return;
 
-        // Section headers
+        // Section header?
         const h = line.match(headerRe);
         if (h) {
           const name = h[1].trim();
@@ -76,12 +69,12 @@
           return;
         }
 
-        // Bullet entries
+        // Bullet in a section?
         const b = line.match(bulletRe);
         if (b && section) {
           const nm = b[1].trim(), vl = b[2].trim();
-          if (section === 'standard')     bullets.standard[nm]   = vl;
-          if (section === 'resistance')   bullets.resistance[nm] = vl;
+          if (section === 'standard')    bullets.standard[nm]   = vl;
+          if (section === 'resistance')  bullets.resistance[nm] = vl;
           if (section === 'professional') bullets.professional.push({name: nm, value: vl});
           if (section === 'combat')       bullets.combat.push({name: nm, value: vl});
           return;
@@ -92,27 +85,24 @@
         if (s) data[s[1].trim()] = s[2].trim();
       });
 
-      // Load PDF and form
+      // Load PDF
       const pdfBytes = await pdfFile.arrayBuffer();
       const pdfDoc   = await PDFLib.PDFDocument.load(pdfBytes);
       const formObj  = pdfDoc.getForm();
 
-      // 1-to-1 field mappings
+      // 1-to-1 field map
       const fieldMap = {
-        // Character info
         'Character Name':'Character Name','Player':'Player Name','Player Name':'Player Name',
         'Sex':'Pronouns','Gender':'Pronouns','Pronouns':'Pronouns',
         'Age':'Age','Species':'Race/Culture','Race':'Race/Culture','Culture':'Race/Culture',
         'Frame':'Frame','Height':'Height','Weight':'Weight',
         'Career':'Career','Social Class':'Social Class',
 
-        // Characteristics max & current
         'STR Max':'STR Max','STR':'STR','CON Max':'CON Max','CON':'CON',
         'SIZ Max':'SIZ Max','SIZ':'SIZ','DEX Max':'DEX Max','DEX':'DEX',
         'INT Max':'INT Max','INT':'INT','POW Max':'POW Max','POW':'POW',
         'CHA Max':'CHA Max','CHA':'CHA',
 
-        // Attributes max & current
         'Action Points Max':'Action Points Max','Action Points':'Action Points',
         'Damage Modifier Max':'Damage Modifier Max','Damage Modifier':'Damage Modifier',
         'Experience Modifier Max':'Experience Modifier Max','Experience Modifier':'Experience Modifier',
@@ -121,7 +111,6 @@
         'Luck Points Max':'Luck Points Max','Luck Points':'Luck Points',
         'Movement Rate Max':'Movement Rate Max','Movement Rate':'Movement Rate',
 
-        // Money
         'Copper':'Copper','Silver':'Silver','Gold':'Gold'
       };
 
@@ -134,10 +123,10 @@
 
       // Background & Contacts → Notes
       if (data['Background, Community & Family']) {
-        try { formObj.getTextField('Notes_1').setText(data['Background, Community & Family']); } catch{}
+        try { formObj.getTextField('Notes_1').setText(data['Background, Community & Family']); } catch {}
       }
       if (data['Contacts, Allies & Enemies']) {
-        try { formObj.getTextField('Notes_2').setText(data['Contacts, Allies & Enemies']); } catch{}
+        try { formObj.getTextField('Notes_2').setText(data['Contacts, Allies & Enemies']); } catch {}
       }
 
       // Difficulty factors
@@ -155,20 +144,20 @@
         if (!v) return;
         const base = Number(v);
         if (isNaN(base)) return;
-        try { formObj.getTextField(`Skill Base ${pos}`).setText(v); } catch{}
-        try { formObj.getTextField(`Total_SK_${pos}`).setText(v); } catch{}
+        try { formObj.getTextField(`Skill Base ${pos}`).setText(v); } catch {}
+        try { formObj.getTextField(`Total_SK_${pos}`).setText(v); } catch {}
         Object.entries(factors).forEach(([tag,f]) => {
           try {
             formObj.getTextField(`${tag}_SK_${pos}`)
                    .setText(Math.floor(base * f).toString());
-          } catch{}
+          } catch {}
         });
       });
 
       // Native Tongue
       if (bullets.standard['Native Tongue']) {
         try { formObj.getTextField('Native Language Base')
-                   .setText(bullets.standard['Native Tongue']); } catch{}
+                   .setText(bullets.standard['Native Tongue']); } catch {}
       }
 
       // Resistances → slots 1–4
@@ -178,13 +167,13 @@
         if (!v) return;
         const base = Number(v);
         if (isNaN(base)) return;
-        try { formObj.getTextField(`Resistance Base ${pos}`).setText(v); } catch{}
-        try { formObj.getTextField(`Total_RE_${pos}`).setText(v); } catch{}
+        try { formObj.getTextField(`Resistance Base ${pos}`).setText(v); } catch {}
+        try { formObj.getTextField(`Total_RE_${pos}`).setText(v); } catch {}
         Object.entries(factors).forEach(([tag,f]) => {
           try {
             formObj.getTextField(`${tag}_RE_${pos}`)
                    .setText(Math.floor(base * f).toString());
-          } catch{}
+          } catch {}
         });
       });
 
@@ -192,14 +181,14 @@
       bullets.professional.forEach((ps,i) => {
         const slot = i + 1;
         const base = Number(ps.value);
-        try { formObj.getTextField(`Prof Skill ${slot}`).setText(ps.name); } catch{}
-        try { formObj.getTextField(`Prof Base ${slot}`).setText(ps.value); } catch{}
+        try { formObj.getTextField(`Prof Skill ${slot}`).setText(ps.name); } catch {}
+        try { formObj.getTextField(`Prof Base ${slot}`).setText(ps.value); } catch {}
         if (!isNaN(base)) {
           Object.entries(factors).forEach(([tag,f]) => {
             try {
               formObj.getTextField(`${tag}_PK_${slot}`)
                      .setText(Math.floor(base * f).toString());
-            } catch{}
+            } catch {}
           });
         }
       });
@@ -208,26 +197,26 @@
       bullets.combat.forEach((cs,i) => {
         const slot = i + 1;
         const base = Number(cs.value);
-        try { formObj.getTextField(`Style ${slot}`).setText(cs.name); } catch{}
-        try { formObj.getTextField(`WS ${slot}`).setText(cs.value); } catch{}
-        try { formObj.getTextField(`Total_CS_${slot}`).setText(cs.value); } catch{}
+        try { formObj.getTextField(`Style ${slot}`).setText(cs.name); } catch {}
+        try { formObj.getTextField(`WS ${slot}`).setText(cs.value); } catch {}
+        try { formObj.getTextField(`Total_CS_${slot}`).setText(cs.value); } catch {}
         if (!isNaN(base)) {
           Object.entries(factors).forEach(([tag,f]) => {
             try {
               formObj.getTextField(`${tag}_CS_${slot}`)
                      .setText(Math.floor(base * f).toString());
-            } catch{}
+            } catch {}
           });
         }
       });
 
       // Save & download
-      const pdfBytesOut = await pdfDoc.save();
-      const blob        = new Blob([pdfBytesOut], { type:'application/pdf' });
-      const url         = URL.createObjectURL(blob);
-      const a           = document.createElement('a');
-      a.href            = url;
-      a.download        = 'filled_sheet.pdf';
+      const out = await pdfDoc.save();
+      const blob = new Blob([out], { type:'application/pdf' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'filled_sheet.pdf';
       a.click();
       URL.revokeObjectURL(url);
     });
