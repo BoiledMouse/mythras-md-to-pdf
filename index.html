@@ -8,11 +8,11 @@
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
-  <h1>Mythras PDF Markdown → Filled Sheet (v.0.0.9)</h1>
+  <h1>Mythras PDF Markdown → Filled Sheet (v.1.0.0)</h1>
   <p>
-    Paste in the exported Markdown from 
+    Paste in the exported Markdown from
     <a href="https://boiledmouse.github.io/mythras-char-gen/" target="_blank">Mythras Char Gen</a>
-    and a blank Mythras PDF from 
+    and a blank Mythras PDF from
     <a href="https://www.reddit.com/r/Mythras/comments/1jj2cqt/i_made_a_new_version_of_my_autosheet/" target="_blank">here</a>.
   </p>
   <form id="sheetForm">
@@ -32,6 +32,37 @@
       return;
     }
 
+    const fieldMap = {
+      'Character Name':'Character Name','Name':'Character Name',
+      'Pronouns':'Pronouns','Sex':'Pronouns','Gender':'Pronouns',
+      'Age':'Age','Hand':'Hand','Frame':'Frame','Height':'Height','Weight':'Weight',
+      'Race/Culture':'Race/Culture','Species':'Race/Culture','Culture':'Race/Culture','Race':'Race/Culture',
+      'Player':'Player Name','Player Name':'Player Name','Homeland':'Homeland',
+      'Career':'Career','Social Class':'Social Class',
+      'STR Max':'STR Max','STR':'STR','CON Max':'CON Max','CON':'CON',
+      'SIZ Max':'SIZ Max','SIZ':'SIZ','DEX Max':'DEX Max','DEX':'DEX',
+      'INT Max':'INT Max','INT':'INT','POW Max':'POW Max','POW':'POW',
+      'CHA Max':'CHA Max','CHA':'CHA',
+      'Action Points Max':'Action Points Max','Action Points':'Action Points',
+      'Damage Modifier Max':'Damage Modifier Max','Damage Modifier':'Damage Modifier','Damage Mod':'Damage Modifier',
+      'Experience Modifier Max':'Experience Modifier Max','Experience Modifier':'Experience Modifier','XP Mod':'Experience Modifier',
+      'Healing Rate Max':'Healing Rate Max','Healing Rate':'Healing Rate',
+      'Initiative Max':'Initiative Max','Initiative':'Initiative',
+      'Luck Points Max':'Luck Points Max','Luck Points':'Luck Points',
+      'Movement Rate Max':'Movement Rate Max','Movement Rate':'Movement Rate',
+      'Copper':'Copper','Silver':'Silver','Gold':'Gold',
+      'Native Tongue':'Native Language Base',
+      'Background, Community & Family':'Notes_1',
+      'Contacts, Allies & Enemies':'Notes_2'
+    };
+
+    const skillOrder = { 'Athletics':1,'Boating':2,'Conceal':3,'Customs':4,
+                         'Dance':5,'Deceit':6,'Drive':7,'First Aid':8,
+                         'Influence':9,'Insight':10,'Locale':11,'Perception':12,
+                         'Ride':13,'Sing':14,'Stealth':15,'Swim':16,'Unarmed':17 };
+    const resOrder   = { 'Brawn':1,'Endurance':2,'Evade':3,'Willpower':4 };
+    const factors    = { VE:2, E:1.5, HD:2/3, FM:1/2, HC:1/10 };
+
     const form = document.getElementById('sheetForm');
     form.addEventListener('submit', async e => {
       e.preventDefault();
@@ -40,168 +71,122 @@
       if (!mdFile || !pdfFile) return alert('Please select both files.');
 
       const mdText = await mdFile.text();
-
-      // Data storage
       const data = {};
-      const bullets = { standard: {}, resistance: {}, professional: [], combat: [] };
+      const bullets = { standard:{}, resistance:{}, professional:[], combat:[] };
       let section = null;
 
-      // Regex patterns
-      const headerRe   = /^#{1,6}\s*(.+?)\s*$/;
-      const bulletRe   = /^\s*[-*]\s*(?:\*\*)?(.+?)(?:\*\*)?\s*:\s*(.+)$/;
-      const simpleRe   = /^\*\*(.+?)\*\*\s*:\s*(.+)$/;
-      const nameHeader = /^#\s*(.+)$/;
+      // Regexes
+      const headerRe = /^#{2,6}\s*(.+?)\s*$/;
+      const bulletRe = /^\s*[-*]\s*(?:\*\*)?(.+?)(?:\*\*)?\s*:\s*(.+)$/;
+      const simpleRe = /^\*\*(.+?)\*\*\s*:\s*(.+)$/;
+      const nameRe   = /^#\s*(.+)$/;
 
-      // Classification maps
-      const skillOrder = { 'Athletics':1,'Boating':2,'Conceal':3,'Customs':4,
-                           'Dance':5,'Deceit':6,'Drive':7,'First Aid':8,
-                           'Influence':9,'Insight':10,'Locale':11,'Perception':12,
-                           'Ride':13,'Sing':14,'Stealth':15,'Swim':16,'Unarmed':17 };
-      const resOrder   = { 'Brawn':1,'Endurance':2,'Evade':3,'Willpower':4 };
+      // Parse markdown
+      mdText.split(/\r?\n/).forEach(lineRaw => {
+        const raw = lineRaw.trim(); if (!raw) return;
 
-      // Parse markdown lines
-      mdText.split(/\r?\n/).forEach(raw => {
-        // Detect top-level name
-        let mName = raw.match(nameHeader);
-        if (mName && !data['Character Name']) {
-          data['Character Name'] = mName[1].trim();
+        // Top-level name
+        const nm = raw.match(nameRe);
+        if (nm && !data['Character Name']) {
+          data['Character Name'] = nm[1].trim();
           return;
         }
 
-        const line = raw.trim(); if (!line) return;
-
-        // Detect headers for Professional/Combat
-        let h = line.match(headerRe);
+        // Section headers
+        const h = raw.match(headerRe);
         if (h) {
-          const sec = h[1].trim();
-          if (/Professional Skills/i.test(sec)) section = 'professional';
-          else if (/Combat Skills/i.test(sec)) section = 'combat';
+          const sec = h[1].trim().toLowerCase();
+          if (sec.includes('professional skills')) section = 'professional';
+          else if (sec.includes('combat skills')) section = 'combat';
           else section = null;
           return;
         }
 
-        // Bullet entries
-        let b = line.match(bulletRe);
+        // Bullets
+        const b = raw.match(bulletRe);
         if (b) {
-          const nmRaw = b[1].trim();
+          const name = b[1].trim();
           let valRaw = b[2].trim();
-          // Determine numeric or text
-          let valNum = valRaw.match(/^(\d+)%?/)?.[1];
-          let val = valNum !== undefined ? valNum : valRaw;
+          const numMatch = valRaw.match(/^(\d+)%?/);
+          const val = numMatch ? numMatch[1] : valRaw;
 
-          // Assign based on section
-          if (section === 'professional') bullets.professional.push({ name: nmRaw, value: val });
-          if (section === 'combat')       bullets.combat.push({       name: nmRaw, value: val });
-          // Always assign standard if in skillOrder
-          if (skillOrder[nmRaw] !== undefined) bullets.standard[nmRaw] = val;
-          // Always assign resistance if in resOrder
-          if (resOrder[nmRaw] !== undefined)   bullets.resistance[nmRaw] = val;
-          // If key maps to a simple field
-          if (fieldMap[nmRaw]) data[nmRaw] = valRaw;
+          // Assign
+          if (skillOrder[name] !== undefined) bullets.standard[name] = val;
+          if (resOrder[name] !== undefined)   bullets.resistance[name] = val;
+          if (section === 'professional') bullets.professional.push({name,val});
+          if (section === 'combat')       bullets.combat.push({name,val});
+          // Also map simple fields
+          if (fieldMap[name]) data[name] = valRaw;
           return;
         }
 
-        // Simple **Key**: Value lines
-        let s = line.match(simpleRe);
-        if (s) {
-          data[s[1].trim()] = s[2].trim();
-        }
+        // Simple **Key**: Value
+        const s = raw.match(simpleRe);
+        if (s) data[s[1].trim()] = s[2].trim();
       });
 
-      // Load PDF doc
+      // Load PDF
       const pdfBytes = await pdfFile.arrayBuffer();
       const pdfDoc   = await PDFLib.PDFDocument.load(pdfBytes);
       const formObj  = pdfDoc.getForm();
 
-      // 1-to-1 field mappings
-      const fieldMap = {
-        'Character Name':'Character Name','Name':'Character Name',
-        'Pronouns':'Pronouns','Sex':'Pronouns','Gender':'Pronouns',
-        'Age':'Age','Hand':'Hand','Frame':'Frame','Height':'Height','Weight':'Weight',
-        'Race/Culture':'Race/Culture','Species':'Race/Culture',
-        'Player':'Player Name','Player Name':'Player Name','Homeland':'Homeland',
-        'Career':'Career','Social Class':'Social Class',
-        'STR Max':'STR Max','STR':'STR','CON Max':'CON Max','CON':'CON',
-        'SIZ Max':'SIZ Max','SIZ':'SIZ','DEX Max':'DEX Max','DEX':'DEX',
-        'INT Max':'INT Max','INT':'INT','POW Max':'POW Max','POW':'POW',
-        'CHA Max':'CHA Max','CHA':'CHA',
-        'Action Points Max':'Action Points Max','Action Points':'Action Points',
-        'Damage Modifier Max':'Damage Modifier Max','Damage Mod':'Damage Modifier',
-        'Damage Modifier':'Damage Modifier',
-        'Experience Modifier Max':'Experience Modifier Max','XP Mod':'Experience Modifier',
-        'Experience Modifier':'Experience Modifier','Healing Rate Max':'Healing Rate Max',
-        'Healing Rate':'Healing Rate','Initiative Max':'Initiative Max','Initiative':'Initiative',
-        'Luck Points Max':'Luck Points Max','Luck Points':'Luck Points',
-        'Movement Rate Max':'Movement Rate Max','Movement Rate':'Movement Rate',
-        'Copper':'Copper','Silver':'Silver','Gold':'Gold',
-        'Native Tongue':'Native Language Base'
-      };
-
       // Fill simple fields
-      Object.entries(fieldMap).forEach(([k,fld]) => {
-        if (data[k] !== undefined) {
-          try { formObj.getTextField(fld).setText(data[k]); } catch {}
+      Object.entries(fieldMap).forEach(([key, fieldName]) => {
+        const val = data[key];
+        if (val !== undefined) {
+          try { formObj.getTextField(fieldName).setText(val); } catch {}
         }
       });
 
-      // Background & Contacts → Notes_1/2
-      if (data['Background, Community & Family'])
-        try { formObj.getTextField('Notes_1').setText(data['Background, Community & Family']); } catch {};
-      if (data['Contacts, Allies & Enemies'])
-        try { formObj.getTextField('Notes_2').setText(data['Contacts, Allies & Enemies']); } catch {};
-
-      // Difficulty factors
-      const factors = { VE:2, E:1.5, HD:2/3, FM:1/2, HC:1/10 };
-
-      // Populate standard skills
-      Object.entries(skillOrder).forEach(([nm,pos]) => {
-        const v = bullets.standard[nm]; if (!v) return;
+      // Skills
+      Object.entries(skillOrder).forEach(([name,pos]) => {
+        const v = bullets.standard[name]; if (!v) return;
         const base = Number(v); if (isNaN(base)) return;
-        try { formObj.getTextField(`Skill Base ${pos}`).setText(v); } catch{};
-        try { formObj.getTextField(`Total_SK_${pos}`).setText(v); } catch{};
+        try { formObj.getTextField(`Skill Base ${pos}`).setText(v); } catch {}
+        try { formObj.getTextField(`Total_SK_${pos}`).setText(v); } catch {}
         Object.entries(factors).forEach(([tag,f]) => {
-          try { formObj.getTextField(`${tag}_SK_${pos}`).setText(Math.floor(base*f).toString()); } catch{};
+          try { formObj.getTextField(`${tag}_SK_${pos}`).setText(Math.floor(base*f).toString()); } catch {}
         });
       });
 
-      // Populate resistances
-      Object.entries(resOrder).forEach(([nm,pos]) => {
-        const v = bullets.resistance[nm]; if (!v) return;
+      // Resistances
+      Object.entries(resOrder).forEach(([name,pos]) => {
+        const v = bullets.resistance[name]; if (!v) return;
         const base = Number(v); if (isNaN(base)) return;
-        try { formObj.getTextField(`Resistance Base ${pos}`).setText(v); } catch{};
-        try { formObj.getTextField(`Total_RE_${pos}`).setText(v); } catch{};
+        try { formObj.getTextField(`Resistance Base ${pos}`).setText(v); } catch {}
+        try { formObj.getTextField(`Total_RE_${pos}`).setText(v); } catch {}
         Object.entries(factors).forEach(([tag,f]) => {
-          try { formObj.getTextField(`${tag}_RE_${pos}`).setText(Math.floor(base*f).toString()); } catch{};
+          try { formObj.getTextField(`${tag}_RE_${pos}`).setText(Math.floor(base*f).toString()); } catch {}
         });
       });
 
-      // Populate professional skills
-      bullets.professional.forEach((ps,i) => {
-        const slot = i+1, base = Number(ps.value);
-        try { formObj.getTextField(`Prof Skill ${slot}`).setText(ps.name); } catch{};
-        try { formObj.getTextField(`Prof Base ${slot}`).setText(ps.value); } catch{};
+      // Professional Skills
+      bullets.professional.forEach(({name,val}, idx) => {
+        const slot = idx+1; const base = Number(val);
+        try { formObj.getTextField(`Prof Skill ${slot}`).setText(name); } catch {}
+        try { formObj.getTextField(`Prof Base ${slot}`).setText(val); } catch {}
         if (!isNaN(base)) Object.entries(factors).forEach(([tag,f]) => {
-          try { formObj.getTextField(`${tag}_PK_${slot}`).setText(Math.floor(base*f).toString()); } catch{};
+          try { formObj.getTextField(`${tag}_PK_${slot}`).setText(Math.floor(base*f).toString()); } catch {}
         });
       });
 
-      // Populate combat styles
-      bullets.combat.forEach((cs,i) => {
-        const slot = i+1, base = Number(cs.value);
-        try { formObj.getTextField(`Style ${slot}`).setText(cs.name); } catch{};
-        try { formObj.getTextField(`WS ${slot}`).setText(cs.value); } catch{};
-        try { formObj.getTextField(`Total_CS_${slot}`).setText(cs.value); } catch{};
+      // Combat Styles
+      bullets.combat.forEach(({name,val}, idx) => {
+        const slot = idx+1; const base = Number(val);
+        try { formObj.getTextField(`Style ${slot}`).setText(name); } catch {}
+        try { formObj.getTextField(`WS ${slot}`).setText(val); } catch {}
+        try { formObj.getTextField(`Total_CS_${slot}`).setText(val); } catch {}
         if (!isNaN(base)) Object.entries(factors).forEach(([tag,f]) => {
-          try { formObj.getTextField(`${tag}_CS_${slot}`).setText(Math.floor(base*f).toString()); } catch{};
+          try { formObj.getTextField(`${tag}_CS_${slot}`).setText(Math.floor(base*f).toString()); } catch {}
         });
       });
 
-      // Save and download
-      const out = await pdfDoc.save();
-      const blob = new Blob([out], { type:'application/pdf' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url; a.download = 'filled_sheet.pdf'; a.click();
+      // Save & download
+      const outBytes = await pdfDoc.save();
+      const blob     = new Blob([outBytes], {type:'application/pdf'});
+      const url      = URL.createObjectURL(blob);
+      const a        = document.createElement('a');
+      a.href         = url; a.download = 'filled_sheet.pdf'; a.click();
       URL.revokeObjectURL(url);
     });
   });
