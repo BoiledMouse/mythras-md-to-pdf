@@ -8,7 +8,7 @@
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
-  <h1>Mythras PDF Markdown → Filled Sheet (v.0.0.8)</h1>
+  <h1>Mythras PDF Markdown → Filled Sheet (v.0.0.9)</h1>
   <p>
     Paste in the exported Markdown from 
     <a href="https://boiledmouse.github.io/mythras-char-gen/" target="_blank">Mythras Char Gen</a>
@@ -41,15 +41,16 @@
 
       const mdText = await mdFile.text();
 
-      // Prepare storages
+      // Data storage
       const data = {};
       const bullets = { standard: {}, resistance: {}, professional: [], combat: [] };
       let section = null;
 
       // Regex patterns
-      const headerRe = /^#{2,6}\s*(?:\*\*)?(.+?)(?:\*\*)?\s*$/;
-      const bulletRe = /^\s*[-*]\s*(?:\*\*)?(.+?)(?:\*\*)?\s*:\s*(.+)$/; // name: value
-      const simpleRe = /^\*\*(.+?)\*\*\s*:\s*(.+)$/;
+      const headerRe   = /^#{1,6}\s*(.+?)\s*$/;
+      const bulletRe   = /^\s*[-*]\s*(?:\*\*)?(.+?)(?:\*\*)?\s*:\s*(.+)$/;
+      const simpleRe   = /^\*\*(.+?)\*\*\s*:\s*(.+)$/;
+      const nameHeader = /^#\s*(.+)$/;
 
       // Classification maps
       const skillOrder = { 'Athletics':1,'Boating':2,'Conceal':3,'Customs':4,
@@ -58,47 +59,66 @@
                            'Ride':13,'Sing':14,'Stealth':15,'Swim':16,'Unarmed':17 };
       const resOrder   = { 'Brawn':1,'Endurance':2,'Evade':3,'Willpower':4 };
 
+      // Parse markdown lines
       mdText.split(/\r?\n/).forEach(raw => {
+        // Detect top-level name
+        let mName = raw.match(nameHeader);
+        if (mName && !data['Character Name']) {
+          data['Character Name'] = mName[1].trim();
+          return;
+        }
+
         const line = raw.trim(); if (!line) return;
-        // Detect headers
-        const h = line.match(headerRe);
+
+        // Detect headers for Professional/Combat
+        let h = line.match(headerRe);
         if (h) {
-          const name = h[1].trim();
-          if (/Professional Skills/i.test(name)) section = 'professional';
-          else if (/Combat Skills/i.test(name)) section = 'combat';
+          const sec = h[1].trim();
+          if (/Professional Skills/i.test(sec)) section = 'professional';
+          else if (/Combat Skills/i.test(sec)) section = 'combat';
           else section = null;
           return;
         }
-        // Bullet lines
-        const b = line.match(bulletRe);
+
+        // Bullet entries
+        let b = line.match(bulletRe);
         if (b) {
-          const nm = b[1].trim();
-          let val = b[2].trim();
-          // Extract leading number if percent
-          const m = val.match(/^(\d+)%/);
-          if (m) val = m[1];
-          if (section === 'professional') bullets.professional.push({ name: nm, value: val });
-          else if (section === 'combat')    bullets.combat.push({ name: nm, value: val });
-          else if (skillOrder[nm])          bullets.standard[nm]   = val;
-          else if (resOrder[nm])            bullets.resistance[nm] = val;
+          const nmRaw = b[1].trim();
+          let valRaw = b[2].trim();
+          // Determine numeric or text
+          let valNum = valRaw.match(/^(\d+)%?/)?.[1];
+          let val = valNum !== undefined ? valNum : valRaw;
+
+          // Assign based on section
+          if (section === 'professional') bullets.professional.push({ name: nmRaw, value: val });
+          if (section === 'combat')       bullets.combat.push({       name: nmRaw, value: val });
+          // Always assign standard if in skillOrder
+          if (skillOrder[nmRaw] !== undefined) bullets.standard[nmRaw] = val;
+          // Always assign resistance if in resOrder
+          if (resOrder[nmRaw] !== undefined)   bullets.resistance[nmRaw] = val;
+          // If key maps to a simple field
+          if (fieldMap[nmRaw]) data[nmRaw] = valRaw;
           return;
         }
-        // Simple key:value
-        const s = line.match(simpleRe);
-        if (s) data[s[1].trim()] = s[2].trim();
+
+        // Simple **Key**: Value lines
+        let s = line.match(simpleRe);
+        if (s) {
+          data[s[1].trim()] = s[2].trim();
+        }
       });
 
-      // Load PDF
+      // Load PDF doc
       const pdfBytes = await pdfFile.arrayBuffer();
       const pdfDoc   = await PDFLib.PDFDocument.load(pdfBytes);
       const formObj  = pdfDoc.getForm();
 
-      // 1-to-1 field mappings including fixes
+      // 1-to-1 field mappings
       const fieldMap = {
-        'Character Name':'Character Name', 'Name':'Character Name',
+        'Character Name':'Character Name','Name':'Character Name',
         'Pronouns':'Pronouns','Sex':'Pronouns','Gender':'Pronouns',
         'Age':'Age','Hand':'Hand','Frame':'Frame','Height':'Height','Weight':'Weight',
-        'Race/Culture':'Race/Culture','Species':'Race/Culture','Culture':'Race/Culture','Race':'Race/Culture',
+        'Race/Culture':'Race/Culture','Species':'Race/Culture',
         'Player':'Player Name','Player Name':'Player Name','Homeland':'Homeland',
         'Career':'Career','Social Class':'Social Class',
         'STR Max':'STR Max','STR':'STR','CON Max':'CON Max','CON':'CON',
@@ -106,29 +126,34 @@
         'INT Max':'INT Max','INT':'INT','POW Max':'POW Max','POW':'POW',
         'CHA Max':'CHA Max','CHA':'CHA',
         'Action Points Max':'Action Points Max','Action Points':'Action Points',
-        'Damage Modifier Max':'Damage Modifier Max','Damage Modifier':'Damage Modifier',
-        'Experience Modifier Max':'Experience Modifier Max','Experience Modifier':'Experience Modifier',
-        'Healing Rate Max':'Healing Rate Max','Healing Rate':'Healing Rate',
-        'Initiative Max':'Initiative Max','Initiative':'Initiative',
+        'Damage Modifier Max':'Damage Modifier Max','Damage Mod':'Damage Modifier',
+        'Damage Modifier':'Damage Modifier',
+        'Experience Modifier Max':'Experience Modifier Max','XP Mod':'Experience Modifier',
+        'Experience Modifier':'Experience Modifier','Healing Rate Max':'Healing Rate Max',
+        'Healing Rate':'Healing Rate','Initiative Max':'Initiative Max','Initiative':'Initiative',
         'Luck Points Max':'Luck Points Max','Luck Points':'Luck Points',
         'Movement Rate Max':'Movement Rate Max','Movement Rate':'Movement Rate',
         'Copper':'Copper','Silver':'Silver','Gold':'Gold',
         'Native Tongue':'Native Language Base'
       };
+
+      // Fill simple fields
       Object.entries(fieldMap).forEach(([k,fld]) => {
-        if (data[k] !== undefined) try { formObj.getTextField(fld).setText(data[k]); } catch{};
+        if (data[k] !== undefined) {
+          try { formObj.getTextField(fld).setText(data[k]); } catch {}
+        }
       });
 
-      // Background & Contacts → Notes
+      // Background & Contacts → Notes_1/2
       if (data['Background, Community & Family'])
-        try { formObj.getTextField('Notes_1').setText(data['Background, Community & Family']); } catch{};
+        try { formObj.getTextField('Notes_1').setText(data['Background, Community & Family']); } catch {};
       if (data['Contacts, Allies & Enemies'])
-        try { formObj.getTextField('Notes_2').setText(data['Contacts, Allies & Enemies']); } catch{};
+        try { formObj.getTextField('Notes_2').setText(data['Contacts, Allies & Enemies']); } catch {};
 
       // Difficulty factors
       const factors = { VE:2, E:1.5, HD:2/3, FM:1/2, HC:1/10 };
 
-      // Standard skills
+      // Populate standard skills
       Object.entries(skillOrder).forEach(([nm,pos]) => {
         const v = bullets.standard[nm]; if (!v) return;
         const base = Number(v); if (isNaN(base)) return;
@@ -139,7 +164,7 @@
         });
       });
 
-      // Resistances
+      // Populate resistances
       Object.entries(resOrder).forEach(([nm,pos]) => {
         const v = bullets.resistance[nm]; if (!v) return;
         const base = Number(v); if (isNaN(base)) return;
@@ -150,7 +175,7 @@
         });
       });
 
-      // Prof skills
+      // Populate professional skills
       bullets.professional.forEach((ps,i) => {
         const slot = i+1, base = Number(ps.value);
         try { formObj.getTextField(`Prof Skill ${slot}`).setText(ps.name); } catch{};
@@ -160,7 +185,7 @@
         });
       });
 
-      // Combat styles
+      // Populate combat styles
       bullets.combat.forEach((cs,i) => {
         const slot = i+1, base = Number(cs.value);
         try { formObj.getTextField(`Style ${slot}`).setText(cs.name); } catch{};
@@ -171,7 +196,7 @@
         });
       });
 
-      // Save & download
+      // Save and download
       const out = await pdfDoc.save();
       const blob = new Blob([out], { type:'application/pdf' });
       const url  = URL.createObjectURL(blob);
